@@ -26,7 +26,7 @@ let currentBackgroundName = null;
 function updateBackground(now) {
     const bg = backgroundForHour(now.getHours());
     if (bg.name !== currentBackgroundName) {
-        document.body.style.background = bg.gradient;
+        document.body.style.backgroundImage = bg.gradient;
         currentBackgroundName = bg.name;
     }
 }
