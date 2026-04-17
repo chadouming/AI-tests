@@ -2,6 +2,34 @@ const dateEl = document.getElementById('date');
 const timeEl = document.getElementById('time');
 const weatherEl = document.getElementById('weather');
 
+const TIME_BACKGROUNDS = [
+    { start: 0, name: 'night', gradient: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)' },
+    { start: 5, name: 'dawn', gradient: 'linear-gradient(135deg, #2c3e50 0%, #fd746c 100%)' },
+    { start: 7, name: 'morning', gradient: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)' },
+    { start: 10, name: 'day', gradient: 'linear-gradient(135deg, #56ccf2 0%, #2f80ed 100%)' },
+    { start: 17, name: 'sunset', gradient: 'linear-gradient(135deg, #ff9966 0%, #ff5e62 60%, #6a1b9a 100%)' },
+    { start: 20, name: 'dusk', gradient: 'linear-gradient(135deg, #355c7d 0%, #6c5b7b 50%, #c06c84 100%)' },
+    { start: 22, name: 'night', gradient: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)' },
+];
+
+function backgroundForHour(hour) {
+    let match = TIME_BACKGROUNDS[0];
+    for (const entry of TIME_BACKGROUNDS) {
+        if (hour >= entry.start) match = entry;
+    }
+    return match;
+}
+
+let currentBackgroundName = null;
+
+function updateBackground(now) {
+    const bg = backgroundForHour(now.getHours());
+    if (bg.name !== currentBackgroundName) {
+        document.body.style.background = bg.gradient;
+        currentBackgroundName = bg.name;
+    }
+}
+
 function updateClock() {
     const now = new Date();
     dateEl.textContent = now.toLocaleDateString(undefined, {
@@ -11,6 +39,7 @@ function updateClock() {
         day: 'numeric',
     });
     timeEl.textContent = now.toLocaleTimeString();
+    updateBackground(now);
 }
 
 updateClock();
