@@ -94,6 +94,21 @@ const COUNTRY_LANGUAGE = {
     IL: 'he', SA: 'ar', AE: 'ar', EG: 'ar', MA: 'ar',
 };
 
+const COUNTRY_SUBREDDIT = {
+    US: 'news', GB: 'unitedkingdom', CA: 'canada', AU: 'australia',
+    NZ: 'newzealand', IE: 'ireland', IN: 'india', ZA: 'southafrica',
+    DE: 'de', AT: 'austria', CH: 'switzerland',
+    FR: 'france', BE: 'belgium',
+    ES: 'spain', MX: 'mexico', AR: 'argentina', BR: 'brasil', PT: 'portugal',
+    IT: 'italy', NL: 'thenetherlands',
+    SE: 'sweden', NO: 'norway', DK: 'denmark', FI: 'finland',
+    PL: 'poland', CZ: 'czech', HU: 'hungary', RO: 'romania', GR: 'greece',
+    RU: 'russia', UA: 'ukraine', TR: 'turkey',
+    JP: 'japan', KR: 'korea', TW: 'taiwan', SG: 'singapore',
+    MY: 'malaysia', ID: 'indonesia', TH: 'thailand', PH: 'philippines',
+    IL: 'israel', EG: 'egypt',
+};
+
 function showWeatherError(message) {
     weatherEl.innerHTML = `<div class="error">${message}</div>`;
 }
@@ -207,6 +222,24 @@ async function loadNewsViaProxy(rssSource) {
     throw new Error('All news sources failed.');
 }
 
+async function loadNewsViaReddit(countryCode) {
+    const subreddit = COUNTRY_SUBREDDIT[countryCode] || 'worldnews';
+    const res = await fetch(
+        `https://www.reddit.com/r/${subreddit}/top.json?t=day&limit=5`,
+        { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) throw new Error(`Reddit ${res.status}`);
+    const data = await res.json();
+    const posts = (data?.data?.children || []).slice(0, 5);
+    if (posts.length === 0) throw new Error('No posts');
+    return posts.map(({ data: p }) => ({
+        title: p.title,
+        link: p.url,
+        pubDate: new Date(p.created_utc * 1000).toISOString(),
+        source: `r/${subreddit}`,
+    }));
+}
+
 async function loadNewsArticles(rssSource) {
     try { return await loadNewsViaRss2Json(rssSource); } catch { /* fall through */ }
     return await loadNewsViaProxy(rssSource);
@@ -214,18 +247,23 @@ async function loadNewsArticles(rssSource) {
 
 async function fetchNews(countryCode, cityName) {
     const country = (countryCode || 'US').toUpperCase();
-    const lang = COUNTRY_LANGUAGE[country] || 'en';
-    const hl = lang === 'en' ? `en-${country}` : lang;
-    const query = cityName ? `?q=${encodeURIComponent(cityName)}&` : '?';
-    const cityRssUrl = `https://news.google.com/rss/search${query}hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
-    const topRssUrl = `https://news.google.com/rss?hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
 
     try {
         let items = [];
-        if (cityName) {
-            try { items = await loadNewsArticles(cityRssUrl); } catch { items = []; }
+
+        try {
+            items = await loadNewsViaReddit(country);
+        } catch {
+            const lang = COUNTRY_LANGUAGE[country] || 'en';
+            const hl = lang === 'en' ? `en-${country}` : lang;
+            const query = cityName ? `?q=${encodeURIComponent(cityName)}&` : '?';
+            const cityRssUrl = `https://news.google.com/rss/search${query}hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
+            const topRssUrl = `https://news.google.com/rss?hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
+            if (cityName) {
+                try { items = await loadNewsArticles(cityRssUrl); } catch { items = []; }
+            }
+            if (items.length === 0) items = await loadNewsArticles(topRssUrl);
         }
-        if (items.length === 0) items = await loadNewsArticles(topRssUrl);
 
         if (items.length === 0) {
             showNewsError('No news articles found.');
