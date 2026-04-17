@@ -32,7 +32,7 @@ All logic lives in two files: `index.html` (structure + styles) and `app.js` (al
 
 **Weather** — `fetchWeather(lat, lon)` calls the Open-Meteo API (no API key needed). WMO weather codes are decoded via the `WEATHER_CODES` lookup table (40+ codes mapped to text + emoji). Reverse geocoding uses the Open-Meteo geocoding endpoint to display the location name.
 
-**News** — `fetchNews(lat, lon)` fetches Google News RSS via the `allorigins.win` CORS proxy. `COUNTRY_LANGUAGE` maps ISO country codes to locale strings for localized feeds. Up to 5 articles are shown; if a city name is known, articles are filtered to prefer local news.
+**News** — `fetchNews(countryCode, cityName)` tries three strategies in order: (1) Reddit JSON API (`r/<subreddit>/top.json`) using `COUNTRY_SUBREDDIT` for country-specific subreddits — no proxy needed, native CORS; (2) Google News RSS via `api.rss2json.com`; (3) Google News RSS via `corsproxy.io` then `allorigins.win`. `COUNTRY_LANGUAGE` maps ISO country codes to locale strings used in Google News fallback URLs.
 
 **Geolocation** — `loadLocation()` requests browser geolocation, then fans out to both `fetchWeather()` and `fetchNews()` in parallel.
 
