@@ -159,47 +159,81 @@ function formatRelativeTime(dateStr) {
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function parseGoogleNewsTitle(rawTitle) {
+    const parts = rawTitle.split(' - ');
+    return {
+        title: parts.length > 1 ? parts.slice(0, -1).join(' - ') : rawTitle,
+        source: parts.length > 1 ? parts[parts.length - 1] : '',
+    };
+}
+
+async function loadNewsViaRss2Json(rssSource) {
+    const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssSource)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`rss2json ${res.status}`);
+    const data = await res.json();
+    if (data.status !== 'ok') throw new Error(data.message || 'rss2json bad response');
+    return (data.items || []).slice(0, 5).map((item) => {
+        const { title, source } = parseGoogleNewsTitle(item.title || 'Untitled');
+        return { title, link: item.link || '#', pubDate: item.pubDate || '', source: item.author || source };
+    });
+}
+
+async function loadNewsViaProxy(rssSource) {
+    const proxies = [
+        (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    ];
+    for (const makeUrl of proxies) {
+        try {
+            const res = await fetch(makeUrl(rssSource));
+            if (!res.ok) continue;
+            const doc = new DOMParser().parseFromString(await res.text(), 'text/xml');
+            if (doc.querySelector('parsererror')) continue;
+            const items = Array.from(doc.querySelectorAll('item')).slice(0, 5);
+            if (items.length === 0) continue;
+            return items.map((item) => {
+                const rawTitle = item.querySelector('title')?.textContent || 'Untitled';
+                const { title, source } = parseGoogleNewsTitle(rawTitle);
+                return {
+                    title,
+                    link: item.querySelector('link')?.textContent || '#',
+                    pubDate: item.querySelector('pubDate')?.textContent || '',
+                    source: item.querySelector('source')?.textContent || source,
+                };
+            });
+        } catch { /* try next */ }
+    }
+    throw new Error('All news sources failed.');
+}
+
+async function loadNewsArticles(rssSource) {
+    try { return await loadNewsViaRss2Json(rssSource); } catch { /* fall through */ }
+    return await loadNewsViaProxy(rssSource);
+}
+
 async function fetchNews(countryCode, cityName) {
     const country = (countryCode || 'US').toUpperCase();
     const lang = COUNTRY_LANGUAGE[country] || 'en';
     const hl = lang === 'en' ? `en-${country}` : lang;
     const query = cityName ? `?q=${encodeURIComponent(cityName)}&` : '?';
-    const rssUrl = `https://news.google.com/rss/search${query}hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
-    const fallbackUrl = `https://news.google.com/rss?hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
-
-    const proxy = (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-
-    async function loadRss(url) {
-        const res = await fetch(proxy(url));
-        if (!res.ok) throw new Error(`News API error: ${res.status}`);
-        const xmlText = await res.text();
-        const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-        if (doc.querySelector('parsererror')) throw new Error('Failed to parse news feed.');
-        return Array.from(doc.querySelectorAll('item')).slice(0, 5);
-    }
+    const cityRssUrl = `https://news.google.com/rss/search${query}hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
+    const topRssUrl = `https://news.google.com/rss?hl=${hl}&gl=${country}&ceid=${country}:${lang}`;
 
     try {
         let items = [];
         if (cityName) {
-            try { items = await loadRss(rssUrl); } catch { items = []; }
+            try { items = await loadNewsArticles(cityRssUrl); } catch { items = []; }
         }
-        if (items.length === 0) items = await loadRss(fallbackUrl);
+        if (items.length === 0) items = await loadNewsArticles(topRssUrl);
 
         if (items.length === 0) {
             showNewsError('No news articles found.');
             return;
         }
 
-        const list = items.map((item) => {
-            const rawTitle = item.querySelector('title')?.textContent || 'Untitled';
-            const link = item.querySelector('link')?.textContent || '#';
-            const pubDate = item.querySelector('pubDate')?.textContent || '';
-            const sourceEl = item.querySelector('source');
-            const source = sourceEl?.textContent || '';
-            const titleParts = rawTitle.split(' - ');
-            const title = titleParts.length > 1 ? titleParts.slice(0, -1).join(' - ') : rawTitle;
-            const derivedSource = source || (titleParts.length > 1 ? titleParts[titleParts.length - 1] : '');
-            const meta = [derivedSource, formatRelativeTime(pubDate)].filter(Boolean).join(' • ');
+        const list = items.map(({ title, link, pubDate, source }) => {
+            const meta = [source, formatRelativeTime(pubDate)].filter(Boolean).join(' • ');
             return `
                 <li>
                     <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">
