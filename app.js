@@ -162,9 +162,26 @@ async function reverseGeocode(latitude, longitude) {
         const res = await fetch(
             `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}&count=1&language=en&format=json`
         );
+        if (res.ok) {
+            const data = await res.json();
+            const r = data?.results?.[0];
+            if (r?.name) return r;
+        }
+    } catch { /* fall through */ }
+    try {
+        const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+        );
         if (!res.ok) return null;
         const data = await res.json();
-        return data?.results?.[0] || null;
+        const name = data.city || data.locality;
+        if (!name) return null;
+        return {
+            name,
+            admin1: data.principalSubdivision || '',
+            country: data.countryName || '',
+            country_code: (data.countryCode || 'US').toUpperCase(),
+        };
     } catch {
         return null;
     }
