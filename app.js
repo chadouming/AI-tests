@@ -1,7 +1,14 @@
 const dateEl = document.getElementById('date');
 const timeEl = document.getElementById('time');
+const timeTorontoEl = document.getElementById('time-toronto');
+const timeBurnabyEl = document.getElementById('time-burnaby');
 const weatherEl = document.getElementById('weather');
 const newsEl = document.getElementById('news');
+
+const EXTRA_TIMES = [
+    { el: () => timeTorontoEl, timeZone: 'America/Toronto' },
+    { el: () => timeBurnabyEl, timeZone: 'America/Vancouver' },
+];
 
 const TIME_BACKGROUNDS = [
     { start: 0, name: 'night', gradient: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)' },
@@ -40,6 +47,9 @@ function updateClock() {
         day: 'numeric',
     });
     timeEl.textContent = now.toLocaleTimeString();
+    for (const { el, timeZone } of EXTRA_TIMES) {
+        el().textContent = now.toLocaleTimeString(undefined, { timeZone });
+    }
     updateBackground(now);
 }
 
