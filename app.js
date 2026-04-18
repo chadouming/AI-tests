@@ -117,8 +117,10 @@ function showNewsError(message) {
     newsEl.innerHTML = `<div class="error">${message}</div>`;
 }
 
-function renderWeather(current, locationText) {
+function renderWeather(current, locationText, townName) {
     const code = WEATHER_CODES[current.weather_code] || { desc: 'Unknown', icon: '❓' };
+    const heading = document.getElementById('weather-heading');
+    if (heading) heading.textContent = townName ? `Weather in ${townName}` : 'Current Weather';
     weatherEl.innerHTML = `
         <div class="weather-main">
             <div id="weather-icon">${code.icon}</div>
@@ -133,13 +135,13 @@ function renderWeather(current, locationText) {
     `;
 }
 
-async function fetchWeather(latitude, longitude, locationText) {
+async function fetchWeather(latitude, longitude, locationText, townName) {
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&temperature_unit=celsius&wind_speed_unit=kmh`;
     try {
         const res = await fetch(weatherUrl);
         if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
         const data = await res.json();
-        renderWeather(data.current, locationText);
+        renderWeather(data.current, locationText, townName);
     } catch (err) {
         showWeatherError(`Unable to load weather: ${err.message}`);
     }
@@ -245,8 +247,17 @@ async function loadNewsArticles(rssSource) {
     return await loadNewsViaProxy(rssSource);
 }
 
+const NEWS_CACHE_TTL = 5 * 60 * 1000;
+const newsCache = {};
+
 async function fetchNews(countryCode, cityName) {
     const country = (countryCode || 'US').toUpperCase();
+    const cacheKey = `${country}:${cityName || ''}`;
+    const cached = newsCache[cacheKey];
+    if (cached && Date.now() - cached.ts < NEWS_CACHE_TTL) {
+        newsEl.innerHTML = cached.html;
+        return;
+    }
 
     try {
         let items = [];
@@ -282,7 +293,9 @@ async function fetchNews(countryCode, cityName) {
             `;
         }).join('');
 
-        newsEl.innerHTML = `<ul class="news-list">${list}</ul>`;
+        const html = `<ul class="news-list">${list}</ul>`;
+        newsCache[cacheKey] = { html, ts: Date.now() };
+        newsEl.innerHTML = html;
     } catch (err) {
         showNewsError(`Unable to load news: ${err.message}`);
     }
@@ -297,7 +310,7 @@ async function loadLocationContent(latitude, longitude) {
     const cityName = place?.name || '';
 
     await Promise.all([
-        fetchWeather(latitude, longitude, locationText),
+        fetchWeather(latitude, longitude, locationText, cityName),
         fetchNews(countryCode, cityName),
     ]);
 }
